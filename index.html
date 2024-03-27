@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Statistical and Data Analysis</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Austin Hart, Ph.D." />
+    <script src="libs/header-attrs-2.25/header-attrs.js"></script>
+    <link href="libs/remark-css-0.0.1/default.css" rel="stylesheet" />
+    <link href="libs/remark-css-0.0.1/nhsr.css" rel="stylesheet" />
+    <link href="libs/remark-css-0.0.1/nhsr-fonts.css" rel="stylesheet" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+.title[
+# Statistical and Data Analysis
+]
+.subtitle[
+## for the (social) data scientist
+]
+.author[
+### Austin Hart, Ph.D.
+]
+.institute[
+### American University
+]
+
+---
+
+
+
+
+
+# Following along
+
+- Fork and clone [AnalysisOverview repo](https://github.com/austin-hart-pols/AnalysisOverview)
+
+- `backloash.dta`: 2016 ANES Survey + 2020 re-interview; white (non-Hispanic) subsample
+
+
+```r
+  library(tidyverse); library(haven); library(janitor); library(knitr)
+
+## Data
+  df = read_dta('backlash.dta') |&gt;
+    mutate(
+      pid2016 = case_when(
+        PartyID2016 %in% 1:3 ~ '1. DEM',
+        PartyID2016 == 4 ~ '2. IND',
+        PartyID2016 %in% 5:7 ~ '3. GOP'
+      )
+    ) |&gt;
+    mutate(across(where(is.labelled), ~ as_factor(.)))
+```
+
+
+---
+class: inverse, middle
+
+# Counts and frequencies
+### For categorical variables
+
+- One-way tables  
+
+- Two-way (contingency) tables
+
+- Test of independence: `\(\chi^2\)`  
+
+
+---
+# One-way tables
+
+&gt; Describe distribution of scores on a single, categorical variable.
+
+.pull-left[
+### `tidyverse` approach
+
+
+```r
+  df |&gt;
+    count(pid2016) |&gt;
+    na.omit() |&gt;
+    mutate(percent = 100 * n / sum(n)) |&gt;
+    kable(digits = 1L)
+```
+
+
+
+|pid2016 |    n| percent|
+|:-------|----:|-------:|
+|1. DEM  | 1178|    38.9|
+|2. IND  |  375|    12.4|
+|3. GOP  | 1473|    48.7|
+]
+
+.pull-right[
+### `janitor` alternative
+
+
+```r
+  df |&gt;
+    tabyl(pid2016, show_na = F) |&gt;
+    adorn_totals() |&gt;
+    adorn_pct_formatting() |&gt;
+    kable(digits = 1L)
+```
+
+
+
+|pid2016 |    n|percent |
+|:-------|----:|:-------|
+|1. DEM  | 1178|38.9%   |
+|2. IND  |  375|12.4%   |
+|3. GOP  | 1473|48.7%   |
+|Total   | 3026|100.0%  |
+]
+
+---
+# Significant variation?
+
+.pull-left[
+
+### Obs vs Exp
+
+|pid2016 |    n|  per| nExp| perExp|
+|:-------|----:|----:|----:|------:|
+|1. DEM  | 1178| 38.9| 1513|   33.3|
+|2. IND  |  375| 12.4| 1513|   33.3|
+|3. GOP  | 1473| 48.7| 1513|   33.3|
+
+Is the obs freq significantly different from expected? Find the probability we observe this by chance alone.
+
+Yes, there is significant variation (unequal proportions) across categories `\((\chi^2_2 = 640, ~ p &lt; 0.001)\)`
+
+]
+
+.pull-right[
+### Goodness of Fit, `\(\chi^2\)`
+
+```r
+  df |&gt;
+    tabyl(pid2016, show_na = F) |&gt;
+    pull(n) |&gt;
+    stats::chisq.test()
+```
+
+```
+
+	Chi-squared test for given probabilities
+
+data:  pull(tabyl(df, pid2016, show_na = F), n)
+X-squared = 640.26, df = 2, p-value &lt; 2.2e-16
+```
+]
+
+---
+# Contingency (two-way) tables
+
+Describe joint, marginal distribution for two categorical variables.
+
+### Code
+
+
+```r
+## Raw cross-tab
+  t1 = 
+    df |&gt;
+    tabyl(
+      pid2016, Female, # Y, X
+      show_na = F,
+      show_missing_levels = F
+    ) 
+
+## Pretty table
+  t1 |&gt;
+    adorn_totals(where = c("row", "col")) |&gt;
+    adorn_percentages('col') |&gt;
+    adorn_pct_formatting(digits = 1) |&gt;
+    adorn_title()
+```
+
+---
+# Contingency (two-way) tables
+
+Describe joint, marginal distribution for two categorical variables.
+
+.pull-left[
+### Table Output
+
+
+|        |Female |       |       |
+|:-------|:------|:------|:------|
+|pid2016 |Not    |Female |Total  |
+|1. DEM  |35.5%  |42.1%  |38.9%  |
+|2. IND  |11.8%  |13.0%  |12.4%  |
+|3. GOP  |52.8%  |44.9%  |48.7%  |
+|Total   |100.0% |100.0% |100.0% |
+]
+
+.pull-right[
+### Interpretation
+Read down the columns (i.e., within categories of X). 
+
+Among females, 42% identify as Democrats, 45% as Republicans, and about 12% Independent. Among non-females, over half (53%) identify as Republicans, about one third (36%) Democrats, and 12% Indpendent.
+]
+
+---
+# Contingency (two-way) tables
+
+Describe joint, marginal distribution for two categorical variables.
+
+.pull-left[
+### `\(\chi^2\)` Test of independence
+
+Does the distribution of outcomes depend on (i.e., change with) the value of the exposure variable?
+
+
+```r
+  chisq.test(t1)
+```
+
+```
+
+	Pearson's Chi-squared test
+
+data:  t1
+X-squared = 18.911, df = 2, p-value = 7.827e-05
+```
+
+]
+
+.pull-right[
+Yes. There is evidence of a systematic relationship between party identification and sex.
+
+It is unlikely we observe a pattern like this by chance alone `\((\chi^2_2 = 18.9,~p&lt;0.001)\)`.
+
+*Remember* that the `\(p-value\)` indicates the probability of your sample data given the assumption that party ID and sex are independent (unrelated).
+]
+
+---
+class: inverse, middle
+
+# Summary statistics
+### For numeric variables
+
+- One variable 
+
+- Group comparisons
+
+- `\(t\)`-tests
+
+- skew and the `\(log\)`-transformation
+
+
+---
+# Describing Distributions
+### What to show and tell
+
+- Give context (min to max)
+
+- Cite location (mean)
+
+- Describe variation (standard deviation)
+
+- Describe shape (skew)
+
+- Present a graph
+
+
+---
+# Single continuous variable
+### Gather info
+
+.pull-left[
+
+```r
+## useful stats
+  summary(df$ImmIndex)
+```
+
+```
+    Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+-1.75698 -0.58677  0.03774 -0.01115  0.50026  1.68081       10 
+```
+
+```r
+  sd(df$ImmIndex, na.rm = T)
+```
+
+```
+[1] 0.7885055
+```
+]
+
+.pull-right[
+
+```r
+## plots
+  hist(df$ImmIndex, main = NULL)
+```
+
+&lt;img src="index_files/figure-html/unnamed-chunk-10-1.svg" style="display: block; margin: auto;" /&gt;
+]
+
+---
+# Immigration Support
+### Among 2016 ANES respondents (white, non-Hispanic)
+
+.pull-left[
+- Creating the index score
+  - Combines responses from 7 questions
+
+  - High scores = pro-immigration  
+  
+- Scores in 2016 (N = 3,038)
+
+  - *Range of values:* -1.76 to 1.68
+
+  - *Mean*: -0.01
+
+  - *Std Dev*: 0.79
+
+]
+
+.pull-right[
+
+&lt;img src="index_files/figure-html/unnamed-chunk-11-1.svg" style="display: block; margin: auto;" /&gt;
+
+]
+
+---
+# Comparing groups
+### Subgroup (mean) comparison
+
+.pull-left[
+### Subgroup code
+
+
+```r
+## Group means
+  df |&gt;
+    group_by(Female) |&gt;
+    summarise(
+      Avg = mean(ImmIndex, na.rm = T),
+      SD = sd(ImmIndex, na.rm = T)
+    ) |&gt;
+    kable(digits = 2L)
+
+## Compare distributions
+  df |&gt;
+    ggplot(aes(x = ImmIndex, fill = Female)) +
+    stat_density(
+      position = 'dodge', 
+      alpha = 0.3, color = 'black'
+    )
+```
+]
+
+.pull-right[
+### Outputs
+
+
+|Female |   Avg|   SD|
+|:------|-----:|----:|
+|Not    | -0.01| 0.79|
+|Female | -0.01| 0.79|
+
+&lt;img src="index_files/figure-html/unnamed-chunk-14-1.svg" style="display: block; margin: auto;" /&gt;
+]
+
+---
+# Mean-focused alternative
+
+.pull-left[
+
+```r
+## Group means
+  s1 = df |&gt;
+    group_by(pid2016) |&gt;
+    summarise(
+      Avg = mean(ImmIndex, na.rm =T)
+    ) |&gt;
+    na.omit()
+  
+## Plotting
+  s1 |&gt;
+    ggplot(aes(x = pid2016, y = Avg, 
+               color = pid2016)) +
+    geom_hline(yintercept = 0) +
+    geom_point(size = 3) +
+    geom_segment(aes(
+      x = pid2016, xend = pid2016, 
+      y = 0, yend = Avg
+    ))
+```
+]
+
+.pull-right[
+&lt;img src="index_files/figure-html/unnamed-chunk-16-1.svg" style="display: block; margin: auto;" /&gt;
+]
+
+
+---
+# Testing for differences
+
+.pull-left[
+### Diff of (2) means
+
+
+```r
+  t.test(ImmIndex ~ Female, df)
+```
+
+```
+
+	Welch Two Sample t-test
+
+data:  ImmIndex by Female
+t = -0.11076, df = 3000.6, p-value = 0.9118
+alternative hypothesis: true difference in means between group Not and group Female is not equal to 0
+95 percent confidence interval:
+ -0.05943693  0.05308079
+sample estimates:
+   mean in group Not mean in group Female 
+        -0.012811683         -0.009633615 
+```
+Support for immigration does not differ systematically for females vs non-females `\((t = -0.11, ~ p = 0.91)\)`.
+
+]
+
+.pull-right[
+### ANOVA for more means
+
+```r
+  summary(aov(ImmIndex ~ pid2016, df))
+```
+
+```
+              Df Sum Sq Mean Sq F value Pr(&gt;F)    
+pid2016        2  365.6   182.8   364.3 &lt;2e-16 ***
+Residuals   3015 1512.9     0.5                   
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+20 observations deleted due to missingness
+```
+
+
+Attitudes about immigration differ significantly by party identification. It is unlikely we observe these differences by chance alone `\((F=364, ~p &lt; 0.001)\)`.
+
+]
+
+---
+# What about skew?
+
+.pull-left[
+- The Problem   
+
+  - Skewness is the pull of the mean from the median
+
+  - Created by one-sided extreme values
+
+  - Renders mean a poor measure of location/middle
+
+- Solution  
+
+  - Transform the data to mitigate skew
+  
+  - For positive skew: use `\(ln(X)\)` or `\(log_{10}(X)\)`
+]
+
+.pull-right[
+&lt;img src="index_files/figure-html/unnamed-chunk-19-1.svg" style="display: block; margin: auto;" /&gt;
+]
+
+---
+class: inverse, middle
+
+# Linear relationships
+### For many numeric variables
+
+- Correlation
+
+- OLS regression
+
+- Regression with panel data
+
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"ratio": "16:9"
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+// add `data-at-shortcutkeys` attribute to <body> to resolve conflicts with JAWS
+// screen reader (see PR #262)
+(function(d) {
+  let res = {};
+  d.querySelectorAll('.remark-help-content table tr').forEach(tr => {
+    const t = tr.querySelector('td:nth-child(2)').innerText;
+    tr.querySelectorAll('td:first-child .key').forEach(key => {
+      const k = key.innerText;
+      if (/^[a-z]$/.test(k)) res[k] = t;  // must be a single letter (key)
+    });
+  });
+  d.body.setAttribute('data-at-shortcutkeys', JSON.stringify(res));
+})(document);
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>

@@ -1,0 +1,514 @@
+---
+title: "Statistical and Data Analysis"
+subtitle: "for the (social) data scientist"
+author: "Austin Hart, Ph.D."
+institute: "American University"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    css: [default, nhsr, nhsr-fonts]
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      ratio: "16:9"
+---
+
+
+```{r setup, include = FALSE}
+## Libraries
+  library(knitr)
+  library(rmdformats)
+
+## Global options
+  knitr::opts_chunk$set(
+    echo = TRUE, 
+    prompt = FALSE,
+    tidy = FALSE, 
+    comment = NA,
+    message = FALSE, 
+    warning = FALSE,
+    dev = 'CairoSVG',
+    fig.align = 'center'
+)
+```
+
+# Following along
+
+- Fork and clone [AnalysisOverview repo](https://github.com/austin-hart-pols/AnalysisOverview)
+
+- `backloash.dta`: 2016 ANES Survey + 2020 re-interview; white (non-Hispanic) subsample
+
+```{r}
+  library(tidyverse); library(haven); library(janitor); library(knitr)
+
+## Data
+  df = read_dta('backlash.dta') |>
+    mutate(
+      pid2016 = case_when(
+        PartyID2016 %in% 1:3 ~ '1. DEM',
+        PartyID2016 == 4 ~ '2. IND',
+        PartyID2016 %in% 5:7 ~ '3. GOP'
+      )
+    ) |>
+    mutate(across(where(is.labelled), ~ as_factor(.)))
+```
+
+
+---
+class: inverse, middle
+
+# Counts and frequencies
+### For categorical variables
+
+- One-way tables  
+
+- Two-way (contingency) tables
+
+- Test of independence: $\chi^2$  
+
+
+---
+# One-way tables
+
+> Describe distribution of scores on a single, categorical variable.
+
+.pull-left[
+### `tidyverse` approach
+
+```{r}
+  df |>
+    count(pid2016) |>
+    na.omit() |>
+    mutate(percent = 100 * n / sum(n)) |>
+    kable(digits = 1L)
+```
+]
+
+.pull-right[
+### `janitor` alternative
+
+```{r}
+  df |>
+    tabyl(pid2016, show_na = F) |>
+    adorn_totals() |>
+    adorn_pct_formatting() |>
+    kable(digits = 1L)
+```
+]
+
+---
+# Significant variation?
+
+.pull-left[
+
+### Obs vs Exp
+```{r, echo = F}
+  df |>
+    count(pid2016) |>
+    na.omit() |>
+    mutate(per = 100 * n / sum(n)) |>
+    mutate(
+      nExp = 0.5 * sum(n),
+      perExp = 100 * nExp / sum(nExp)
+    ) |>
+    kable(digits = 1L)
+```
+
+Is the obs freq significantly different from expected? Find the probability we observe this by chance alone.
+
+Yes, there is significant variation (unequal proportions) across categories $(\chi^2_2 = 640, ~ p < 0.001)$
+
+]
+
+.pull-right[
+### Goodness of Fit, $\chi^2$
+```{r}
+  df |>
+    tabyl(pid2016, show_na = F) |>
+    pull(n) |>
+    stats::chisq.test()
+```
+]
+
+---
+# Contingency (two-way) tables
+
+Describe joint, marginal distribution for two categorical variables.
+
+### Code
+
+```{r, eval = FALSE}
+## Raw cross-tab
+  t1 = 
+    df |>
+    tabyl(
+      pid2016, Female, # Y, X
+      show_na = F,
+      show_missing_levels = F
+    ) 
+
+## Pretty table
+  t1 |>
+    adorn_totals(where = c("row", "col")) |>
+    adorn_percentages('col') |>
+    adorn_pct_formatting(digits = 1) |>
+    adorn_title()
+```
+
+---
+# Contingency (two-way) tables
+
+Describe joint, marginal distribution for two categorical variables.
+
+.pull-left[
+### Table Output
+
+```{r, echo = FALSE}
+## Raw cross-tab
+  t1 = 
+    df |>
+    tabyl(
+      pid2016, Female, # Y, X
+      show_na = F,
+      show_missing_levels = F
+    ) 
+
+## Pretty table
+  t1 |>
+    adorn_totals(where = c("row", "col")) |>
+    adorn_percentages('col') |>
+    adorn_pct_formatting(digits = 1) |>
+    adorn_title() |>
+    kable()
+```
+]
+
+.pull-right[
+### Interpretation
+Read down the columns (i.e., within categories of X). 
+
+Among females, 42% identify as Democrats, 45% as Republicans, and about 12% Independent. Among non-females, over half (53%) identify as Republicans, about one third (36%) Democrats, and 12% Indpendent.
+]
+
+---
+# Contingency (two-way) tables
+
+Describe joint, marginal distribution for two categorical variables.
+
+.pull-left[
+### $\chi^2$ Test of independence
+
+Does the distribution of outcomes depend on (i.e., change with) the value of the exposure variable?
+
+```{r}
+  chisq.test(t1)
+```
+
+]
+
+.pull-right[
+Yes. There is evidence of a systematic relationship between party identification and sex.
+
+It is unlikely we observe a pattern like this by chance alone $(\chi^2_2 = 18.9,~p<0.001)$.
+
+*Remember* that the $p-value$ indicates the probability of your sample data given the assumption that party ID and sex are independent (unrelated).
+]
+
+---
+class: inverse, middle
+
+# Summary statistics
+### For numeric variables
+
+- One variable 
+
+- Group comparisons
+
+- $t$-tests
+
+- skew and the $log$-transformation
+
+
+---
+# Describing Distributions
+### What to show and tell
+
+- Give context (min to max)
+
+- Cite location (mean)
+
+- Describe variation (standard deviation)
+
+- Describe shape (skew)
+
+- Present a graph
+
+
+---
+# Single continuous variable
+### Gather info
+
+.pull-left[
+```{r}
+## useful stats
+  summary(df$ImmIndex)
+  sd(df$ImmIndex, na.rm = T)
+```
+]
+
+.pull-right[
+```{r, fig.dim=c(4,3)}
+## plots
+  hist(df$ImmIndex, main = NULL)
+```
+]
+
+---
+# Immigration Support
+### Among 2016 ANES respondents (white, non-Hispanic)
+
+.pull-left[
+- Creating the index score
+  - Combines responses from 7 questions
+
+  - High scores = pro-immigration  
+  
+- Scores in 2016 (N = 3,038)
+
+  - *Range of values:* `r min(df$ImmIndex, na.rm = T) |> round(2)` to `r max(df$ImmIndex, na.rm = T) |> round(2)`
+
+  - *Mean*: `r mean(df$ImmIndex, na.rm = T) |> round(2)`
+
+  - *Std Dev*: `r sd(df$ImmIndex, na.rm = T) |> round(2)`
+
+]
+
+.pull-right[
+
+```{r, echo=FALSE, fig.dim=c(4,4)}
+df |>
+  ggplot(aes(x = ImmIndex)) +
+  stat_density(trim = F, fill = 'cornflowerblue') +
+  geom_histogram(aes(y = ..density..), color = 'black', fill = NA, bins = 15) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(y = 'Frequency', x = 'Immigration index score') +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.line.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+```
+
+]
+
+---
+# Comparing groups
+### Subgroup (mean) comparison
+
+.pull-left[
+### Subgroup code
+
+```{r, eval = FALSE}
+## Group means
+  df |>
+    group_by(Female) |>
+    summarise(
+      Avg = mean(ImmIndex, na.rm = T),
+      SD = sd(ImmIndex, na.rm = T)
+    ) |>
+    kable(digits = 2L)
+
+## Compare distributions
+  df |>
+    ggplot(aes(x = ImmIndex, fill = Female)) +
+    stat_density(
+      position = 'dodge', 
+      alpha = 0.3, color = 'black'
+    )
+```
+]
+
+.pull-right[
+### Outputs
+
+```{r, echo = F}
+  df |>
+    group_by(Female) |>
+    summarise(
+      Avg = mean(ImmIndex, na.rm = T),
+      SD = sd(ImmIndex, na.rm = T)
+    ) |>
+    kable(digits = 2L)
+```
+
+```{r, echo = F, fig.dim=c(4,2.5)}
+  df |>
+    ggplot(aes(x = ImmIndex, fill = Female)) +
+    stat_density(
+      position = 'dodge', 
+      alpha = 0.3, color = 'black'
+    ) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +
+    theme_classic(base_size = 14)
+```
+]
+
+---
+# Mean-focused alternative
+
+.pull-left[
+```{r, eval = FALSE}
+## Group means
+  s1 = df |>
+    group_by(pid2016) |>
+    summarise(
+      Avg = mean(ImmIndex, na.rm =T)
+    ) |>
+    na.omit()
+  
+## Plotting
+  s1 |>
+    ggplot(aes(x = pid2016, y = Avg, 
+               color = pid2016)) +
+    geom_hline(yintercept = 0) +
+    geom_point(size = 3) +
+    geom_segment(aes(
+      x = pid2016, xend = pid2016, 
+      y = 0, yend = Avg
+    ))
+```
+]
+
+.pull-right[
+```{r, echo = FALSE, fig.dim=c(4,4)}
+## Group means
+  df |>
+    group_by(pid2016) |>
+    summarise(
+      Avg = mean(ImmIndex, na.rm =T)
+    ) |>
+    na.omit() |>
+    ggplot(aes(x = pid2016, y = Avg,
+               color = fct_rev(pid2016),
+               label = round(Avg, 2))) +
+    geom_hline(yintercept = 0) +
+    geom_point(size = 4) +
+    geom_text(hjust = 0, nudge_x = 0.11) +
+    geom_segment(
+      aes(
+        x = pid2016, xend = pid2016, 
+        y = 0, yend = Avg
+      ),
+      size = 1
+    ) +
+    labs(
+      x = NULL,
+      y = 'Mean Immig Support'
+    ) +
+    theme_classic(base_size = 14) +
+    theme(
+      axis.line = element_blank(),
+      axis.ticks = element_blank(),
+      axis.text.y = element_blank(),
+      legend.position = 'none'
+    )
+```
+]
+
+
+---
+# Testing for differences
+
+.pull-left[
+### Diff of (2) means
+
+```{r}
+  t.test(ImmIndex ~ Female, df)
+```
+Support for immigration does not differ systematically for females vs non-females $(t = -0.11, ~ p = 0.91)$.
+
+]
+
+.pull-right[
+### ANOVA for more means
+```{r}
+  summary(aov(ImmIndex ~ pid2016, df))
+```
+
+
+Attitudes about immigration differ significantly by party identification. It is unlikely we observe these differences by chance alone $(F=364, ~p < 0.001)$.
+
+]
+
+---
+# What about skew?
+
+.pull-left[
+- The Problem   
+
+  - Skewness is the pull of the mean from the median
+
+  - Created by one-sided extreme values
+
+  - Renders mean a poor measure of location/middle
+
+- Solution  
+
+  - Transform the data to mitigate skew
+  
+  - For positive skew: use $ln(X)$ or $log_{10}(X)$
+]
+
+.pull-right[
+```{r, echo = FALSE, fig.dim=c(4,4.5)}
+  GDP = gapminder::gapminder |>
+    filter(year == 1997) |> 
+    mutate(
+      country = country, 
+      gdp = gdpPercap,
+      metric = 'Original',
+      .keep = 'none'
+    )
+  G2 = gapminder::gapminder |>
+    filter(year == 1997) |> 
+    mutate(
+      country = country, 
+      gdp = log(gdpPercap),
+      metric = 'Logged',
+      .keep = 'none'
+    )
+  
+  bind_rows(GDP, G2) |>
+    ggplot(aes(x = gdp)) +
+    facet_wrap(~  fct_rev(metric), nrow = 2, 
+               scales = 'free_x', strip.position = 'right') +
+    geom_histogram(bins = 15, color = 'white') +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.4))) +
+    labs(
+      y = NULL,
+      x = 'Measure of GDP'
+    ) +
+    theme_classic(base_size = 14) +
+    theme(
+      axis.line.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank()
+    )
+    
+```
+]
+
+---
+class: inverse, middle
+
+# Linear relationships
+### For many numeric variables
+
+- Correlation
+
+- OLS regression
+
+- Regression with panel data
+
