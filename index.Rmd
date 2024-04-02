@@ -512,3 +512,29 @@ class: inverse, middle
 
 - Regression with panel data
 
+
+---
+# Linear Correlation
+
+.pull-left[
+### Correlation coefficient, $r$
+
+- measure of linear dependence 
+
+- indexes direction and magnitude
+
+- useful for exploring relationships
+
+]
+
+.pull-right[
+```{r}
+  gapminder::gapminder |>
+    select(where(is.numeric), -year) |>
+    corrr::correlate() |>
+    kable(digits = 2L)
+```
+]
+
+---
+# Regression: Basics
